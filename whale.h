@@ -32,8 +32,8 @@ unsigned char *whale_decode(
     void          (*free)   (void     *block, void *user_data),
 
     // output
-    unsigned long *width,
-    unsigned long *height
+    unsigned *width,
+    unsigned *height
 );
 
 #ifdef __cplusplus

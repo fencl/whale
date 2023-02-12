@@ -50,7 +50,7 @@ enum {
     VP8L_LENCODE_LENGTHS = 19,
     VP8L_OFFSET_COUNT    = 120,
 
-    VP8L_LITLEN_COUNT = VP8L_LITERALS_COUNT + VP8L_LENGTHS_COUNT,
+    VP8L_LITLEN_COUNT = VP8L_LITERALS_COUNT + VP8L_LENGTHS_COUNT
 };
 
 typedef unsigned char  vp8l_byte_t;
@@ -65,7 +65,7 @@ typedef struct vp8l_code {
     union {
         vp8l_byte_t symbol[2];
         vp8l_code_word_t root;
-    };
+    } u;
     vp8l_code_node_t *tree;
 } *vp8l_code_t;
 
@@ -141,11 +141,11 @@ static vp8l_code_word_t vp8l_code_read(vp8l_context_t ctx, vp8l_code_t code) {
     vp8l_code_word_t  size = code->size;
 
     if (tree) {
-        vp8l_code_word_t index = code->root;
+        vp8l_code_word_t index = code->u.root;
         while (index >= size)
             index = tree[index - size].child[ctx->read(1, ctx->u)];
         return index;
-    } else return code->symbol[size < 2 ? 0 : ctx->read(1, ctx->u)];
+    } else return code->u.symbol[size < 2 ? 0 : ctx->read(1, ctx->u)];
 }
 
 static void vp8l_cannonical_code(
@@ -185,15 +185,15 @@ static void vp8l_cannonical_code(
 
     code->size = size;
     code->tree = tree;
-    code->root = root;
+    code->u.root = root;
 }
 
 static void vp8l_simple_code_decode(vp8l_context_t ctx, vp8l_code_t code) {
     vp8l_byte_t two_symbols = ctx->read(1, ctx->u);
-    code->tree      = 0;
-    code->size      = two_symbols + 1;
-    code->symbol[0] = ctx->read(1 + ctx->read(1, ctx->u) * 7, ctx->u);
-    code->symbol[1] = two_symbols ? ctx->read(8, ctx->u) : 0;
+    code->tree        = 0;
+    code->size        = two_symbols + 1;
+    code->u.symbol[0] = ctx->read(1 + ctx->read(1, ctx->u) * 7, ctx->u);
+    code->u.symbol[1] = two_symbols ? ctx->read(8, ctx->u) : 0;
 }
 
 static void vp8l_complex_code_decode(
@@ -541,16 +541,16 @@ static void vp8l_apply_transform_color(
     vp8l_pixel_t *image,
     vp8l_size_t   w,
     vp8l_size_t   h,
-    vp8l_byte_t   color_bits,
+    vp8l_byte_t   bits,
     vp8l_pixel_t *color) {
 
-    vp8l_size_t block_size = 1 << color_bits;
+    vp8l_size_t block_size = 1 << bits;
     vp8l_size_t columns = (w + block_size - 1) / block_size;
 
     for (vp8l_size_t y = 0; y < h; ++y) {
-        vp8l_pixel_t *line = color + (y >> color_bits) * columns;
+        vp8l_pixel_t *line = color + (y >> bits) * columns;
         for (vp8l_size_t x = 0; x < w; ++x, ++image) {
-            vp8l_pixel_t cpx = line[x >> color_bits];
+            vp8l_pixel_t cpx = line[x >> bits];
 
             vp8l_byte_t
                 g = image->g,
@@ -595,16 +595,16 @@ static inline vp8l_byte_t vp8l_transform_index_reduction(vp8l_byte_t size) {
 }
 
 static vp8l_byte_t vp8l_transform_index(vp8l_context_t ctx, vp8l_pixel_t **o) {
-    vp8l_byte_t param = ctx->read(8, ctx->u), s = param + 1;
-    vp8l_pixel_t *data = vp8l_decode_image(ctx, 0, 0, s, 1);
+    vp8l_byte_t c = ctx->read(8, ctx->u);
+    vp8l_pixel_t *img = vp8l_decode_image(ctx, 0, 0, c + 1, 1), p = {0,0,0,0};
 
-    for (vp8l_pixel_t *px = data + 1, *e = data + s; px < e; ++px)
-        px->r = (px->r + px[-1].r) & 0xFF,
-        px->g = (px->g + px[-1].g) & 0xFF,
-        px->b = (px->b + px[-1].b) & 0xFF,
-        px->a = (px->a + px[-1].a) & 0xFF;
+    for (vp8l_pixel_t *px = img + 1, *e = px + c; px < e; p = *px++)
+        px->r = (px->r + p.r) & 0xFF,
+        px->g = (px->g + p.g) & 0xFF,
+        px->b = (px->b + p.b) & 0xFF,
+        px->a = (px->a + p.a) & 0xFF;
 
-    return *o = data, vp8l_transform_index_reduction(param);
+    return *o = img, vp8l_transform_index_reduction(c);
 }
 
 static void vp8l_apply_transform_index(
@@ -635,14 +635,14 @@ static void vp8l_apply_transform_index(
 
 static void *vp8l_decode_context(
     vp8l_context_t ctx,
-    unsigned long *width,
-    unsigned long *height) {
+    unsigned *width,
+    unsigned *height) {
 
     vp8l_size_t w = ctx->read(14, ctx->u) + 1, fullw = w;
     vp8l_size_t h = ctx->read(14, ctx->u) + 1;
 
-    if (width) *width = w;
-    if (height) *height = h;
+    if (width)  *width  = (unsigned)w;
+    if (height) *height = (unsigned)h;
 
     ctx->read(4, ctx->u);
 
@@ -737,16 +737,10 @@ unsigned char *whale_decode(
     unsigned long (*stream) (unsigned char n, void *user_data),
     void*         (*alloc)  (unsigned long n, void *user_data),
     void          (*free)   (void     *block, void *user_data),
-    unsigned long  *width,
-    unsigned long  *height) {
+    unsigned       *width,
+    unsigned       *height) {
 
-    struct vp8l_context ctx = {
-        .u     = user_data,
-        .read  = stream,
-        .alloc = alloc,
-        .free  = free,
-    };
-
+    struct vp8l_context ctx = { user_data, stream, alloc, free };
     return (unsigned char*)vp8l_decode_context(&ctx, width, height);
 }
 

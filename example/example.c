@@ -47,14 +47,10 @@ static void example_webp_to_targa(const char* in_file, const char *out_file) {
     fseek(in, 21, SEEK_CUR);
 
     // user_data
-    example_context_t ctx = {
-        .file   = in,
-        .buffer = 0,
-        .offset = 8,
-    };
+    example_context_t ctx = { in, 0, 8 };
 
     // decode webp
-    unsigned long w, h;
+    unsigned w, h;
     unsigned char *rgba = whale_decode(&ctx,
         example_stream,
         example_alloc,
