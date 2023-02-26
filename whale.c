@@ -604,16 +604,17 @@ static vp8l_byte_t vp8l_transform_index(vp8l_context_t ctx, vp8l_pixel_t **o) {
         px->b = (px->b + p.b) & 0xFF,
         px->a = (px->a + p.a) & 0xFF;
 
-    return *o = img, vp8l_transform_index_reduction(c);
+    return *o = img, c;
 }
 
 static void vp8l_apply_transform_index(
     vp8l_pixel_t *image,
     vp8l_size_t   fullw,
     vp8l_size_t   h,
-    vp8l_byte_t   bits,
+    vp8l_byte_t   size,
     vp8l_pixel_t *index) {
 
+    vp8l_byte_t bits = vp8l_transform_index_reduction(size);
     vp8l_size_t stride = fullw >> bits;
     vp8l_pixel_t *px = image + fullw * h, *l = image + stride * h;
     vp8l_byte_t
@@ -621,9 +622,13 @@ static void vp8l_apply_transform_index(
         mod   = (1 << bits) - 1,
         rb    = 3 - bits;
 
-    for (vp8l_size_t y = h; l -= stride, y; --y)
-        for (vp8l_size_t x = fullw; x;)
-            --x, *--px = index[(l[x >> bits].g >> ((x & mod) << rb)) & mask];
+    for (vp8l_size_t y = h; l -= stride, y; --y) {
+        for (vp8l_size_t x = fullw; x;) {
+            --x;
+            vp8l_byte_t i = (l[x >> bits].g >> ((x & mod) << rb)) & mask;
+            *--px = (i < size ? index[i] : (vp8l_pixel_t){ 0, 0, 0, 0 });
+        }
+    }
 }
 
 #endif
@@ -659,7 +664,7 @@ static void *vp8l_decode_context(
     #endif
 
     #ifndef WHALE_DISABLE_INDEX_TRANSFORM
-    vp8l_byte_t index_bits = 0; vp8l_pixel_t *index = 0;
+    vp8l_byte_t index_size = 0; vp8l_pixel_t *index = 0;
     #endif
 
     for (;ctx->read(1, ctx->u); ++count) switch (t = ctx->read(2, ctx->u)) {
@@ -681,7 +686,8 @@ static void *vp8l_decode_context(
 
         #ifndef WHALE_DISABLE_INDEX_TRANSFORM
         case VP8L_TRANSFORM_INDEX:
-            w >>= index_bits = vp8l_transform_index(ctx, &index);
+            index_size = vp8l_transform_index(ctx, &index);
+            w >>= vp8l_transform_index_reduction(index_size);
             goto append;
         #endif
 
@@ -713,7 +719,7 @@ static void *vp8l_decode_context(
         #ifndef WHALE_DISABLE_INDEX_TRANSFORM
         case VP8L_TRANSFORM_INDEX:
             vp8l_apply_transform_index(rgba, w = fullw, h,
-                index_bits, index); break;
+                index_size, index); break;
         #endif
     }
 
