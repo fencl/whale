@@ -49,8 +49,10 @@ enum {
     VP8L_DISTANCES_COUNT = 40,
     VP8L_LENCODE_LENGTHS = 19,
     VP8L_OFFSET_COUNT    = 120,
+    VP8L_CACHE_SIZE_MAX  = 2048,
 
-    VP8L_LITLEN_COUNT = VP8L_LITERALS_COUNT + VP8L_LENGTHS_COUNT
+    VP8L_LITLEN_COUNT = VP8L_LITERALS_COUNT + VP8L_LENGTHS_COUNT,
+    VP8L_MAX_SYMBOLS  = VP8L_LITLEN_COUNT + VP8L_CACHE_SIZE_MAX,
 };
 
 typedef unsigned char  vp8l_byte_t;
@@ -217,7 +219,7 @@ static void vp8l_complex_code_decode(
     vp8l_cannonical_code(ctx, lencode_lengths,
         VP8L_LENCODE_LENGTHS, lencode, lencode_treemem);
 
-    vp8l_byte_t *code_lengths = (vp8l_byte_t*)ctx->alloc(size, ctx->u);
+    vp8l_byte_t code_lengths[VP8L_MAX_SYMBOLS];
     vp8l_code_word_t code_count = 0;
 
     for (vp8l_code_word_t i = 0, p = 8, s, c;
@@ -243,7 +245,6 @@ static void vp8l_complex_code_decode(
     }
 
     vp8l_cannonical_code(ctx, code_lengths, code_count, code, 0);
-    ctx->free(code_lengths, ctx->u);
 }
 
 static inline void vp8l_code_decode(
@@ -288,9 +289,9 @@ static inline vp8l_size_t vp8l_color_hash(vp8l_byte_t bits, vp8l_pixel_t c) {
 }
 
 static inline void vp8l_cache_put(
-    vp8l_code_word_t bits,
-    vp8l_pixel_t    *cache,
-    vp8l_pixel_t     color) {
+    vp8l_byte_t   bits,
+    vp8l_pixel_t *cache,
+    vp8l_pixel_t  color) {
     if (bits) cache[vp8l_color_hash(bits, color)] = color;
 }
 
@@ -481,10 +482,10 @@ static void vp8l_apply_predictor(
 
         case 11: {
              vp8l_diff_t m =
-                (vp8l_abs(a->r - b->r) - vp8l_abs(c->r - b->r)) +
-                (vp8l_abs(a->g - b->g) - vp8l_abs(c->g - b->g)) +
-                (vp8l_abs(a->b - b->b) - vp8l_abs(c->b - b->b)) +
-                (vp8l_abs(a->a - b->a) - vp8l_abs(c->a - b->a)) ;
+                vp8l_abs(a->r - b->r) - vp8l_abs(c->r - b->r) +
+                vp8l_abs(a->g - b->g) - vp8l_abs(c->g - b->g) +
+                vp8l_abs(a->b - b->b) - vp8l_abs(c->b - b->b) +
+                vp8l_abs(a->a - b->a) - vp8l_abs(c->a - b->a) ;
 
             p->r = (p->r + (m > 0 ? a->r : c->r)) & 255;
             p->g = (p->g + (m > 0 ? a->g : c->g)) & 255;
