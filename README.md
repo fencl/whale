@@ -1,6 +1,7 @@
 # Whale
-Simple __VP8L__ bit stream decoder.
-VP8L is a image format used by the WebP format in lossless mode. WebP decoders usually support both lossless and lossy mode, which makes them significantly bigger than necessary if you only want lossless. So Whale does only the absolute minimum to parse VP8L bit stream and output RGBA pixel array.
+Simple __VP8L__ bit stream decoder written in both __C__ (or __C++__, both valid) and __Zig__.
+_VP8L_ is a image format used by the WebP format in lossless mode.
+WebP decoders usually support both lossless and lossy mode, which makes them significantly bigger than necessary if you only want lossless. So Whale does only the absolute minimum to parse _VP8L_ bit stream and output RGBA pixel array.
 
 ## Usage
 Use the function
@@ -27,7 +28,8 @@ Function will return an array of pixels in scan-line order, each pixel represent
 ## Compilation
 There is no need for build system and so no build system or script is provided. Just add `whale.c` in your sources and `whale.h` in your include directories.
 
----
+### Example
+
 `example.c` uses Whale as header-only library (see below). To compile the example, run
 ```
 gcc example.c -o webp2tga
@@ -52,6 +54,11 @@ If you know for sure that you are only decoding specific set of images which doe
 `WHALE_DISABLE_COLOR_TRANSFORM`
 `WHALE_DISABLE_SUBTRACT_GREEN_TRANSFORM`
 `WHALE_DISABLE_INDEX_TRANSFORM`
+
+## Zig
+Repository contains `whale.zig` file which contains whale decoder rewritten in Zig. This version works more-less the same as the C version, just more Zig-ified. See comments in the source code.
+
+The code is currently compatible with __0.11-dev__ version of the Zig compiler. Let's see how long it is going to take before some breaking change comes.
 
 ## Remarks
 This library has no error codes, asserts or any runtime checks whatsoever. The input stream has to be correct otherwise your program will output garbage or more likely crash.
