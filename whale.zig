@@ -747,7 +747,7 @@ fn IndexTransform(comptime enable: bool) type {
                     const i = out[ry * w + (rx >> b)].g >>
                         trunc(u3, (rx & mod) << rb) & msk;
 
-                    out[ry * fw + rx] = if (i < len) ind[i] else .{};
+                    out[ry * fw + rx] = if (i <= len) ind[i] else .{};
                 }
             }
         }

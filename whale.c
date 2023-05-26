@@ -627,7 +627,7 @@ static void vp8l_apply_transform_index(
         for (vp8l_size_t x = fullw; x;) {
             --x;
             vp8l_byte_t i = (l[x >> bits].g >> ((x & mod) << rb)) & mask;
-            *--px = (i < size ? index[i] : (vp8l_pixel_t){ 0, 0, 0, 0 });
+            *--px = (i <= size ? index[i] : (vp8l_pixel_t){ 0, 0, 0, 0 });
         }
     }
 }
