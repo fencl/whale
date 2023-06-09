@@ -354,13 +354,10 @@ static vp8l_pixel_t *vp8l_decode_image(
         vp8l_code_word_t code = vp8l_code_read(ctx, g->code + 0);
 
         if (code < VP8L_LITERALS_COUNT) {
-            vp8l_pixel_t color = {
-                (vp8l_byte_t)vp8l_code_read(ctx, g->code + 1),
-                (vp8l_byte_t)code,
-                (vp8l_byte_t)vp8l_code_read(ctx, g->code + 2),
-                (vp8l_byte_t)vp8l_code_read(ctx, g->code + 3),
-            };
-
+            vp8l_byte_t r = vp8l_code_read(ctx, g->code + 1);
+            vp8l_byte_t b = vp8l_code_read(ctx, g->code + 2);
+            vp8l_byte_t a = vp8l_code_read(ctx, g->code + 3);
+            vp8l_pixel_t color = { r, (vp8l_byte_t) code, b, a };
             vp8l_cache_put(cbits, cache, *pixel++ = color);
         } else if (code < VP8L_LITLEN_COUNT) {
             vp8l_size_t
