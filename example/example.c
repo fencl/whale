@@ -51,7 +51,7 @@ static void example_webp_to_targa(const char* in_file, const char *out_file) {
 
     // decode webp
     unsigned w, h;
-    unsigned char *rgba = whale_decode(&ctx,
+    unsigned char *rgba = (unsigned char*) whale_decode(&ctx,
         example_stream,
         example_alloc,
         example_free,

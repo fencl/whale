@@ -23,7 +23,7 @@ extern "C" {
  * \===========================================================================/
  */
 
-unsigned char *whale_decode(
+void *whale_decode(
     void *user_data,
 
     // interface
@@ -32,8 +32,8 @@ unsigned char *whale_decode(
     void          (*free)   (void     *block, void *user_data),
 
     // output
-    unsigned *width,
-    unsigned *height
+    unsigned int *width,
+    unsigned int *height
 );
 
 #ifdef __cplusplus

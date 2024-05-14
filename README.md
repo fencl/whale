@@ -6,7 +6,7 @@ WebP decoders usually support both lossless and lossy mode, which makes them sig
 ## Usage
 Use the function
 ```c
-unsigned char *whale_decode(
+void *whale_decode(
     void *user_data,
 
     // interface
@@ -58,7 +58,7 @@ If you know for sure that you are only decoding specific set of images which doe
 ## Zig
 Repository contains `whale.zig` file which contains whale decoder rewritten in Zig. This version works more-less the same as the C version, just more Zig-ified. See comments in the source code.
 
-The code is currently compatible with __0.11-dev__ version of the Zig compiler. Let's see how long it is going to take before some breaking change comes.
+The code is currently compatible with __0.13-dev__ version of the Zig compiler. Let's see how long it is going to take before some breaking change comes.
 
 ## Remarks
 This library has no error codes, asserts or any runtime checks whatsoever. The input stream has to be correct otherwise your program will output garbage or more likely crash.

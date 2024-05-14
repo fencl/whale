@@ -38,6 +38,8 @@
 extern "C" {
 #endif
 
+#include <stdint.h>
+
 enum {
     VP8L_TRANSFORM_PREDICTOR = 0,
     VP8L_TRANSFORM_COLOR     = 1,
@@ -55,10 +57,10 @@ enum {
     VP8L_MAX_SYMBOLS  = VP8L_LITLEN_COUNT + VP8L_CACHE_SIZE_MAX,
 };
 
-typedef unsigned char  vp8l_byte_t;
-typedef unsigned long  vp8l_size_t;
-typedef signed   long  vp8l_diff_t;
-typedef unsigned short vp8l_code_word_t;
+typedef uint8_t        vp8l_byte_t;
+typedef uint_fast32_t  vp8l_size_t;
+typedef int_fast32_t   vp8l_diff_t;
+typedef uint_least16_t vp8l_code_word_t;
 
 typedef struct vp8l_code_node { vp8l_code_word_t child[2]; } vp8l_code_node_t;
 
@@ -144,9 +146,9 @@ static vp8l_code_word_t vp8l_code_read(vp8l_context_t ctx, vp8l_code_t code) {
 
     if (tree) {
         vp8l_code_word_t index = code->u.root;
-        while (index >= size)
+        while (index >= size) {
             index = tree[index - size].child[ctx->read(1, ctx->u)];
-        return index;
+        } return index;
     } else return code->u.symbol[size < 2 ? 0 : ctx->read(1, ctx->u)];
 }
 
@@ -175,15 +177,17 @@ static void vp8l_cannonical_code(
     vp8l_code_node_t *tree = treemem ? treemem : (vp8l_code_node_t*)
         ctx->alloc(sizeof(vp8l_code_node_t) * real_size, ctx->u);
 
-    for (vp8l_code_node_t *i = tree, *e = i + real_size; i < e; ++i)
+    for (vp8l_code_node_t *i = tree, *e = i + real_size; i < e; ++i) {
         i->child[0] = 0, i->child[1] = 0;
+    }
 
     vp8l_code_word_t root = 0;
     vp8l_code_word_t used = size;
 
-    for (vp8l_code_word_t i = 0, l; i < size; ++i)
+    for (vp8l_code_word_t i = 0, l; i < size; ++i) {
         if ((l = lengths[i]) > 0) vp8l_code_insert(tree, &root,
             size, i, base[l - 1]++, &used, l);
+    }
 
     code->size = size;
     code->tree = tree;
@@ -203,7 +207,7 @@ static void vp8l_complex_code_decode(
     vp8l_code_t      code,
     vp8l_code_word_t size) {
 
-    vp8l_byte_t lencode_lengths[VP8L_LENCODE_LENGTHS];
+    vp8l_byte_t      lencode_lengths[VP8L_LENCODE_LENGTHS];
     vp8l_code_node_t lencode_treemem[VP8L_LENCODE_LENGTHS - 1];
 
     vp8l_byte_t lencode_read = ctx->read(4, ctx->u) + 4;
@@ -211,29 +215,26 @@ static void vp8l_complex_code_decode(
         lencode_lengths[vp8l_lencode_order[i]] = i < lencode_read
             ? ctx->read(3, ctx->u) : 0;
 
-    vp8l_code_word_t limit = ctx->read(1, ctx->u)
-        ? ctx->read(ctx->read(3, ctx->u) * 2 + 2, ctx->u) + 2
-        : size;
+    vp8l_code_word_t limit = !ctx->read(1, ctx->u) ? size
+        : ctx->read(ctx->read(3, ctx->u) * 2 + 2, ctx->u) + 2;
 
     struct vp8l_code lc, *lencode = &lc;
     vp8l_cannonical_code(ctx, lencode_lengths,
         VP8L_LENCODE_LENGTHS, lencode, lencode_treemem);
 
-    vp8l_byte_t code_lengths[VP8L_MAX_SYMBOLS];
-    vp8l_code_word_t code_count = 0;
+    vp8l_byte_t lengths[VP8L_MAX_SYMBOLS];
+    vp8l_code_word_t count = 0;
 
-    for (vp8l_code_word_t i = 0, p = 8, s, c;
-        code_count < size && i < limit; ++i) {
-
+    for (vp8l_code_word_t i = 0, p = 8, s, c; count < size && i < limit; ++i) {
         switch (s = vp8l_code_read(ctx, lencode)) {
             default: case 0: {
-                code_lengths[code_count++] = s;
+                lengths[count++] = s;
             } continue;
 
             case  1: case  2: case  3: case  4: case  5:
             case  6: case  7: case  8: case  9: case 10:
             case 11: case 12: case 13: case 14: case 15: {
-                code_lengths[code_count++] = p = s;
+                lengths[count++] = p = s;
             } continue;
 
             case 16: s =  3 + ctx->read(2, ctx->u); c = p; break;
@@ -241,10 +242,10 @@ static void vp8l_complex_code_decode(
             case 18: s = 11 + ctx->read(7, ctx->u); c = 0; break;
         }
 
-        while (s--) code_lengths[code_count++] = c;
+        while (s--) lengths[count++] = c;
     }
 
-    vp8l_cannonical_code(ctx, code_lengths, code_count, code, 0);
+    vp8l_cannonical_code(ctx, lengths, count, code, 0);
 }
 
 static inline void vp8l_code_decode(
@@ -268,8 +269,9 @@ static inline void vp8l_group_decode(
         VP8L_DISTANCES_COUNT,
     };
 
-    for (vp8l_byte_t i = 0; i < 5; ++i)
+    for (vp8l_byte_t i = 0; i < 5; ++i) {
         vp8l_code_decode(ctx, group->code + i, sizes[i]);
+    }
 }
 
 /* /===========================================================================\
@@ -303,27 +305,29 @@ static vp8l_pixel_t *vp8l_decode_image(
     vp8l_size_t    h) {
 
     vp8l_pixel_t *image = storage ? storage
-        : (vp8l_pixel_t*)ctx->alloc(w * h * sizeof(vp8l_pixel_t), ctx->u);
+        : (vp8l_pixel_t*) ctx->alloc(w * h * sizeof(vp8l_pixel_t), ctx->u);
 
     vp8l_byte_t cbits = ctx->read(1, ctx->u) ? ctx->read(4, ctx->u) : 0;
     vp8l_pixel_t *cache = cbits ? (vp8l_pixel_t*)
         ctx->alloc(sizeof(vp8l_pixel_t) * (1 << cbits), ctx->u) : 0;
 
-    if (cbits) for (vp8l_size_t i = 0, c = 1 << cbits; i < c; ++i)
-        cache[i].r = 0, cache[i].g = 0, cache[i].b = 0, cache[i].a = 0;
+    if (cbits) for (vp8l_size_t i = 0, c = 1 << cbits; i < c; ++i) {
+        cache[i] = (vp8l_pixel_t) {0};
+    }
 
-    vp8l_byte_t entropy_bits   = 0;
-    vp8l_size_t entropy_stride = 0;
-    vp8l_pixel_t *entropy      = 0;
-
-    vp8l_size_t group_count = 1;
+    vp8l_size_t   group_count    = 1;
+    vp8l_byte_t   entropy_bits   = 0;
+    vp8l_size_t   entropy_stride = 0;
+    vp8l_pixel_t *entropy        = 0;
 
     if (main && ctx->read(1, ctx->u)) {
         entropy_bits = ctx->read(3, ctx->u) + 2;
 
-        vp8l_size_t block_size = 1 << entropy_bits;
-        vp8l_size_t ew = entropy_stride = (w + block_size - 1) / block_size;
-        vp8l_size_t eh = (h + block_size - 1) / block_size;
+        vp8l_size_t block_mask = (1 << entropy_bits) - 1;
+        vp8l_size_t ew = (w + block_mask) >> entropy_bits;
+        vp8l_size_t eh = (h + block_mask) >> entropy_bits;
+
+        entropy_stride = ew;
 
         vp8l_pixel_t *ep = entropy = vp8l_decode_image(ctx, 0, 0, ew, eh);
         for (vp8l_size_t i = 0, s = ew * eh; i < s; ++i, ++ep) {
@@ -336,8 +340,9 @@ static vp8l_pixel_t *vp8l_decode_image(
         ctx->alloc(sizeof(struct vp8l_group) * group_count, ctx->u)
         : &single_group;
 
-    for (vp8l_size_t i = 0; i < group_count; ++i)
+    for (vp8l_size_t i = 0; i < group_count; ++i) {
         vp8l_group_decode(ctx, groups + i, cbits);
+    }
 
     for (vp8l_pixel_t *pixel = image, *end = image + w * h; pixel < end;) {
         vp8l_group_t g = groups;
@@ -361,7 +366,7 @@ static vp8l_pixel_t *vp8l_decode_image(
             vp8l_cache_put(cbits, cache, *pixel++ = color);
         } else if (code < VP8L_LITLEN_COUNT) {
             vp8l_size_t
-                length   = vp8l_lendst(ctx, code - VP8L_LITERALS_COUNT) + 1,
+                length   = vp8l_lendst(ctx, code - VP8L_LITERALS_COUNT),
                 distcode = vp8l_code_read(ctx, g->code + 4),
                 distance = vp8l_lendst(ctx, distcode);
 
@@ -371,16 +376,19 @@ static vp8l_pixel_t *vp8l_decode_image(
 
             offset = offset < 1 ? 1 : offset;
 
-            for (vp8l_size_t i = 0; i < length; ++i, ++pixel)
+            for (vp8l_size_t i = 0; i <= length; ++i, ++pixel) {
                 vp8l_cache_put(cbits, cache, *pixel = pixel[-offset]);
+            }
         } else *pixel++ = cache[code - VP8L_LITLEN_COUNT];
     }
 
     vp8l_code_node_t *tree;
-    for (vp8l_size_t i = 0; i < group_count; ++i)
-        for (vp8l_byte_t j = 0; j < 5; ++j)
+    for (vp8l_size_t i = 0; i < group_count; ++i) {
+        for (vp8l_byte_t j = 0; j < 5; ++j) {
             if ((tree = groups[i].code[j].tree))
                 ctx->free(tree, ctx->u);
+        }
+    }
 
     if (group_count > 1) ctx->free(groups, ctx->u);
     if (entropy) ctx->free(entropy, ctx->u);
@@ -388,7 +396,7 @@ static vp8l_pixel_t *vp8l_decode_image(
     return image;
 }
 
-#if !defined(WHALE_DISABLE_COLOR_TRANSFORM) ||\
+#if !defined(WHALE_DISABLE_PREDICTOR_TRANSFORM) ||\
     !defined(WHALE_DISABLE_COLOR_TRANSFORM)
 
 static vp8l_byte_t vp8l_block_image_decode(
@@ -399,12 +407,13 @@ static vp8l_byte_t vp8l_block_image_decode(
 
     vp8l_byte_t bits = ctx->read(3, ctx->u) + 2;
 
-    vp8l_size_t block_size = 1 << bits;
-    vp8l_size_t data_w = (w + block_size - 1) / block_size;
-    vp8l_size_t data_h = (h + block_size - 1) / block_size;
+    vp8l_size_t block_mask = (1 << bits) - 1;
+    vp8l_size_t data_w = (w + block_mask) >> bits;
+    vp8l_size_t data_h = (h + block_mask) >> bits;
 
     return *data = vp8l_decode_image(ctx, 0, 0, data_w, data_h), bits;
 }
+
 #endif
 
 /* /===========================================================================\
@@ -427,7 +436,7 @@ static inline vp8l_byte_t vp8l_sub_half(vp8l_diff_t a, vp8l_diff_t b) {
 }
 
 static void vp8l_apply_predictor(
-    vp8l_byte_t type,
+    vp8l_byte_t   t,
     vp8l_pixel_t *p,
     vp8l_pixel_t *a,
     vp8l_pixel_t *b,
@@ -436,8 +445,8 @@ static void vp8l_apply_predictor(
 
     vp8l_pixel_t *x, *y;
 
-    switch (type) {
-        case 0: p->a = (p->a + 255) & 255; break;
+    switch (t) {
+        case 0: p->a += 255; break;
 
         case 1: x = a; goto add;
         case 2: x = c; goto add;
@@ -445,17 +454,17 @@ static void vp8l_apply_predictor(
         case 4: x = b; goto add;
 
         add: {
-            p->r = (p->r + x->r) & 255;
-            p->g = (p->g + x->g) & 255;
-            p->b = (p->b + x->b) & 255;
-            p->a = (p->a + x->a) & 255;
+            p->r += x->r;
+            p->g += x->g;
+            p->b += x->b;
+            p->a += x->a;
         } break;
 
         case 5: {
-            p->r = (p->r + (((a->r + d->r) / 2) + c->r) / 2) & 255;
-            p->g = (p->g + (((a->g + d->g) / 2) + c->g) / 2) & 255;
-            p->b = (p->b + (((a->b + d->b) / 2) + c->b) / 2) & 255;
-            p->a = (p->a + (((a->a + d->a) / 2) + c->a) / 2) & 255;
+            p->r += (((a->r + d->r) >> 1) + c->r) >> 1;
+            p->g += (((a->g + d->g) >> 1) + c->g) >> 1;
+            p->b += (((a->b + d->b) >> 1) + c->b) >> 1;
+            p->a += (((a->a + d->a) >> 1) + c->a) >> 1;
         } break;
 
         case 6: x = a; y = b; goto avg;
@@ -464,17 +473,17 @@ static void vp8l_apply_predictor(
         case 9: x = c; y = d; goto avg;
 
         avg: {
-            p->r = (p->r + (x->r + y->r) / 2) & 255;
-            p->g = (p->g + (x->g + y->g) / 2) & 255;
-            p->b = (p->b + (x->b + y->b) / 2) & 255;
-            p->a = (p->a + (x->a + y->a) / 2) & 255;
+            p->r += (x->r + y->r) >> 1;
+            p->g += (x->g + y->g) >> 1;
+            p->b += (x->b + y->b) >> 1;
+            p->a += (x->a + y->a) >> 1;
         } break;
 
         case 10: {
-            p->r = (p->r + ((a->r + b->r) / 2 + (c->r + d->r) / 2) / 2) & 255;
-            p->g = (p->g + ((a->g + b->g) / 2 + (c->g + d->g) / 2) / 2) & 255;
-            p->b = (p->b + ((a->b + b->b) / 2 + (c->b + d->b) / 2) / 2) & 255;
-            p->a = (p->a + ((a->a + b->a) / 2 + (c->a + d->a) / 2) / 2) & 255;
+            p->r += (((a->r + b->r) >> 1) + ((c->r + d->r) >> 1)) >> 1;
+            p->g += (((a->g + b->g) >> 1) + ((c->g + d->g) >> 1)) >> 1;
+            p->b += (((a->b + b->b) >> 1) + ((c->b + d->b) >> 1)) >> 1;
+            p->a += (((a->a + b->a) >> 1) + ((c->a + d->a) >> 1)) >> 1;
         } break;
 
         case 11: {
@@ -484,24 +493,24 @@ static void vp8l_apply_predictor(
                 vp8l_abs(a->b - b->b) - vp8l_abs(c->b - b->b) +
                 vp8l_abs(a->a - b->a) - vp8l_abs(c->a - b->a) ;
 
-            p->r = (p->r + (m > 0 ? a->r : c->r)) & 255;
-            p->g = (p->g + (m > 0 ? a->g : c->g)) & 255;
-            p->b = (p->b + (m > 0 ? a->b : c->b)) & 255;
-            p->a = (p->a + (m > 0 ? a->a : c->a)) & 255;
+            p->r += (m > 0 ? a->r : c->r);
+            p->g += (m > 0 ? a->g : c->g);
+            p->b += (m > 0 ? a->b : c->b);
+            p->a += (m > 0 ? a->a : c->a);
         } break;
 
         case 12: {
-            p->r = (p->r + vp8l_clamp(a->r + c->r - b->r)) & 255;
-            p->g = (p->g + vp8l_clamp(a->g + c->g - b->g)) & 255;
-            p->b = (p->b + vp8l_clamp(a->b + c->b - b->b)) & 255;
-            p->a = (p->a + vp8l_clamp(a->a + c->a - b->a)) & 255;
+            p->r += vp8l_clamp(a->r + c->r - b->r);
+            p->g += vp8l_clamp(a->g + c->g - b->g);
+            p->b += vp8l_clamp(a->b + c->b - b->b);
+            p->a += vp8l_clamp(a->a + c->a - b->a);
         } break;
 
         case 13: {
-            p->r = (p->r + vp8l_sub_half((a->r + c->r) / 2, b->r)) & 255;
-            p->g = (p->g + vp8l_sub_half((a->g + c->g) / 2, b->g)) & 255;
-            p->b = (p->b + vp8l_sub_half((a->b + c->b) / 2, b->b)) & 255;
-            p->a = (p->a + vp8l_sub_half((a->a + c->a) / 2, b->a)) & 255;
+            p->r += vp8l_sub_half((a->r + c->r) >> 1, b->r);
+            p->g += vp8l_sub_half((a->g + c->g) >> 1, b->g);
+            p->b += vp8l_sub_half((a->b + c->b) >> 1, b->b);
+            p->a += vp8l_sub_half((a->a + c->a) >> 1, b->a);
         } break;
     }
 }
@@ -513,11 +522,13 @@ static void vp8l_apply_transform_predictor(
     vp8l_byte_t   bits,
     vp8l_pixel_t *data) {
 
-    for (vp8l_size_t b = 1 << bits, cols = (w + b - 1) / b, y = 0; y < h; ++y)
-        for (vp8l_size_t x = 0; x < w; ++x, ++px)
+    for (vp8l_size_t c = (w + (1 << bits) - 1) >> bits, y = 0; y < h; ++y) {
+        for (vp8l_size_t x = 0; x < w; ++x, ++px) {
             vp8l_apply_predictor(x
-                ? (y ? data[((y >> bits) * cols + (x >> bits))].g : 1)
-                : (!!y) * 2, px, px - 1, px - w - 1, px - w, px - w + 1);
+                ? (y ? data[((y >> bits) * c + (x >> bits))].g : 1)
+                : !!y << 1, px, px - 1, px - w - 1, px - w, px - w + 1);
+        }
+    }
 }
 
 #endif
@@ -532,7 +543,7 @@ static void vp8l_apply_transform_predictor(
 static inline vp8l_byte_t vp8l_color_delta(vp8l_byte_t c1, vp8l_byte_t c2) {
     vp8l_diff_t sc1 = c1 >= 128 ? -256 + c1 : c1;
     vp8l_diff_t sc2 = c2 >= 128 ? -256 + c2 : c2;
-    return ((sc1 * sc2) >> 5) & 0xFF;
+    return (sc1 * sc2) >> 5;
 }
 
 static void vp8l_apply_transform_color(
@@ -542,22 +553,13 @@ static void vp8l_apply_transform_color(
     vp8l_byte_t   bits,
     vp8l_pixel_t *color) {
 
-    vp8l_size_t block_size = 1 << bits;
-    vp8l_size_t columns = (w + block_size - 1) / block_size;
-
-    for (vp8l_size_t y = 0; y < h; ++y) {
-        vp8l_pixel_t *line = color + (y >> bits) * columns;
+    for (vp8l_size_t c = (w + (1 << bits) - 1) >> bits, y = 0; y < h; ++y) {
+        vp8l_pixel_t *line = color + (y >> bits) * c;
         for (vp8l_size_t x = 0; x < w; ++x, ++image) {
             vp8l_pixel_t cpx = line[x >> bits];
-
-            vp8l_byte_t
-                g = image->g,
-                r = (image->r + vp8l_color_delta(cpx.b, g)) & 0xFF,
-                b = (image->b + vp8l_color_delta(cpx.g, g)
-                    + vp8l_color_delta(cpx.r, r)) & 0xFF;
-
-            image->r = r;
-            image->b = b;
+            image->r += vp8l_color_delta(cpx.b, image->g);
+            image->b += vp8l_color_delta(cpx.g, image->g)
+                    + vp8l_color_delta(cpx.r, image->r);
         }
     }
 }
@@ -572,8 +574,9 @@ static void vp8l_apply_transform_color(
 #ifndef WHALE_DISABLE_SUBTRACT_GREEN_TRANSFORM
 
 static void vp8l_apply_transform_green(vp8l_pixel_t *img, vp8l_size_t size) {
-    for (vp8l_pixel_t *px = img, *e = px + size; px < e; ++px)
-        px->r = (px->r + px->g) & 255, px->b = (px->b + px->g) & 255;
+    for (vp8l_pixel_t *px = img, *e = px + size; px < e; ++px) {
+        px->r += px->g, px->b += px->g;
+    }
 }
 
 #endif
@@ -586,7 +589,7 @@ static void vp8l_apply_transform_green(vp8l_pixel_t *img, vp8l_size_t size) {
 #ifndef WHALE_DISABLE_INDEX_TRANSFORM
 
 static inline vp8l_byte_t vp8l_transform_index_reduction(vp8l_byte_t size) {
-    switch (size / 2) {
+    switch (size >> 1) {
         default: return 0; case 0: return 3; case 1: return 2;
         case 2: case 3: case 4: case 5: case 6: case 7: return 1;
     }
@@ -594,15 +597,11 @@ static inline vp8l_byte_t vp8l_transform_index_reduction(vp8l_byte_t size) {
 
 static vp8l_byte_t vp8l_transform_index(vp8l_context_t ctx, vp8l_pixel_t **o) {
     vp8l_byte_t c = ctx->read(8, ctx->u);
-    vp8l_pixel_t *img = vp8l_decode_image(ctx, 0, 0, c + 1, 1), p = {0,0,0,0};
+    vp8l_pixel_t *img = vp8l_decode_image(ctx, 0, 0, c + 1, 1), p = {0};
 
-    for (vp8l_pixel_t *px = img + 1, *e = px + c; px < e; p = *px++)
-        px->r = (px->r + p.r) & 0xFF,
-        px->g = (px->g + p.g) & 0xFF,
-        px->b = (px->b + p.b) & 0xFF,
-        px->a = (px->a + p.a) & 0xFF;
-
-    return *o = img, c;
+    for (vp8l_pixel_t *px = img + 1, *e = px + c; px < e; p = *px++) {
+        px->r += p.r, px->g += p.g, px->b += p.b, px->a += p.a;
+    } return *o = img, c;
 }
 
 static void vp8l_apply_transform_index(
@@ -616,14 +615,14 @@ static void vp8l_apply_transform_index(
     vp8l_size_t stride = fullw >> bits;
     vp8l_pixel_t *px = image + fullw * h, *l = image + stride * h;
     vp8l_byte_t
-        mask  = (1 << (8 >> bits)) - 1,
-        mod   = (1 << bits) - 1,
-        rb    = 3 - bits;
+        mask = (1 << (8 >> bits)) - 1,
+        mod  = (1 << bits) - 1,
+        rb   = 3 - bits;
 
     for (vp8l_size_t y = h; l -= stride, y; --y) {
         for (vp8l_size_t x = fullw; x--;) {
             vp8l_byte_t i = (l[x >> bits].g >> ((x & mod) << rb)) & mask;
-            *--px = (i <= size ? index[i] : (vp8l_pixel_t){ 0, 0, 0, 0 });
+            *--px = (i <= size ? index[i] : (vp8l_pixel_t) {0});
         }
     }
 }
@@ -637,18 +636,18 @@ static void vp8l_apply_transform_index(
 
 static void *vp8l_decode_context(
     vp8l_context_t ctx,
-    unsigned *width,
-    unsigned *height) {
+    unsigned int  *width,
+    unsigned int  *height) {
 
     vp8l_size_t w = ctx->read(14, ctx->u) + 1, fullw = w;
     vp8l_size_t h = ctx->read(14, ctx->u) + 1;
 
-    if (width)  *width  = (unsigned)w;
-    if (height) *height = (unsigned)h;
+    if (width)  *width  = (unsigned int) w;
+    if (height) *height = (unsigned int) h;
 
     ctx->read(4, ctx->u);
 
-    vp8l_pixel_t *rgba = (vp8l_pixel_t*)ctx->alloc(w * h * 4, ctx->u);
+    vp8l_pixel_t *rgba = (vp8l_pixel_t*) ctx->alloc(w * h * 4, ctx->u);
 
     vp8l_byte_t list = 0, count = 0, t;
 
@@ -664,7 +663,7 @@ static void *vp8l_decode_context(
     vp8l_byte_t index_size = 0; vp8l_pixel_t *index = 0;
     #endif
 
-    for (;ctx->read(1, ctx->u); ++count) switch (t = ctx->read(2, ctx->u)) {
+    while (ctx->read(1, ctx->u)) switch (t = ctx->read(2, ctx->u)) {
         #ifndef WHALE_DISABLE_PREDICTOR_TRANSFORM
         case VP8L_TRANSFORM_PREDICTOR:
             predictor_bits = vp8l_block_image_decode(ctx, w, h, &predictor);
@@ -678,7 +677,8 @@ static void *vp8l_decode_context(
         #endif
 
         #ifndef WHALE_DISABLE_SUBTRACT_GREEN_TRANSFORM
-        case VP8L_TRANSFORM_GREEN: goto append;
+        case VP8L_TRANSFORM_GREEN:
+            goto append;
         #endif
 
         #ifndef WHALE_DISABLE_INDEX_TRANSFORM
@@ -689,34 +689,30 @@ static void *vp8l_decode_context(
         #endif
 
         append: list = (list << 2) | t;
-        default: break;
+        default: ++count; break;
     }
 
     vp8l_decode_image(ctx, 1, rgba, w, h);
 
     for (vp8l_byte_t i = 0; i < count; ++i, list >>= 2) switch (list & 3) {
         #ifndef WHALE_DISABLE_PREDICTOR_TRANSFORM
-        case VP8L_TRANSFORM_PREDICTOR:
-            vp8l_apply_transform_predictor(rgba, w, h,
-                predictor_bits, predictor); break;
+        case VP8L_TRANSFORM_PREDICTOR: vp8l_apply_transform_predictor(
+            rgba, w, h, predictor_bits, predictor); break;
         #endif
 
         #ifndef WHALE_DISABLE_COLOR_TRANSFORM
-        case VP8L_TRANSFORM_COLOR:
-            vp8l_apply_transform_color(rgba, w, h,
-                color_bits, color); break;
+        case VP8L_TRANSFORM_COLOR: vp8l_apply_transform_color(
+            rgba, w, h, color_bits, color); break;
         #endif
 
         #ifndef WHALE_DISABLE_SUBTRACT_GREEN_TRANSFORM
-        case VP8L_TRANSFORM_GREEN:
-            vp8l_apply_transform_green(rgba, w * h);
-                break;
+        case VP8L_TRANSFORM_GREEN: vp8l_apply_transform_green(
+            rgba, w * h); break;
         #endif
 
         #ifndef WHALE_DISABLE_INDEX_TRANSFORM
-        case VP8L_TRANSFORM_INDEX:
-            vp8l_apply_transform_index(rgba, w = fullw, h,
-                index_size, index); break;
+        case VP8L_TRANSFORM_INDEX: vp8l_apply_transform_index(
+            rgba, w = fullw, h, index_size, index); break;
         #endif
     }
 
@@ -735,16 +731,16 @@ static void *vp8l_decode_context(
     return rgba;
 }
 
-unsigned char *whale_decode(
+void *whale_decode(
     void           *user_data,
     unsigned long (*stream) (unsigned char n, void *user_data),
     void*         (*alloc)  (unsigned long n, void *user_data),
     void          (*free)   (void     *block, void *user_data),
-    unsigned       *width,
-    unsigned       *height) {
+    unsigned int   *width,
+    unsigned int   *height) {
 
     struct vp8l_context ctx = { user_data, stream, alloc, free };
-    return (unsigned char*)vp8l_decode_context(&ctx, width, height);
+    return vp8l_decode_context(&ctx, width, height);
 }
 
 #ifdef __cplusplus

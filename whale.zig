@@ -107,7 +107,7 @@ pub const Image = struct {
     // \=======================================================================/
 
     pub inline fn pixels(self: *Self) []Pixel {
-        return @ptrCast([*]Pixel, self.data)[0 .. self.pixel_count()];
+        return @as([*]Pixel, @ptrCast(self.data))[0 .. self.pixel_count()];
     }
 
     // /=======================================================================\
@@ -123,7 +123,7 @@ pub const Image = struct {
     // \=======================================================================/
 
     pub inline fn pixel(self: *const Self, x: u16, y: u16) Pixel {
-        return @ptrCast([*]Pixel, self.data)[@as(u32, x) +
+        return @as([*]Pixel, @ptrCast(self.data))[@as(u32, x) +
             @as(u32, y) * @as(u32, self.w)];
     }
 
@@ -168,12 +168,12 @@ const MAX_SYMBOLS  = LITLEN_COUNT + CACHE_SIZE_MAX;
 // \===========================================================================/
 
 inline fn trunc(comptime T: type, v: anytype) T {
-    return @truncate(T, @bitCast(@Type(.{
+    return @truncate(@as(@Type(.{
         .Int = .{
             .signedness = @typeInfo(T).Int.signedness,
             .bits       = @typeInfo(@TypeOf(v)).Int.bits,
         },
-    }), v));
+    }), @bitCast(v)));
 }
 
 // /===========================================================================\
@@ -336,7 +336,7 @@ const Code = struct {
         };
 
         var accum: u16 = 0; for (&base) |*cbase| {
-            var c = cbase.*;
+            const c = cbase.*;
             cbase.* = accum;
             accum = accum + c << 1;
         }
@@ -352,7 +352,7 @@ const Code = struct {
         for (tree[0 .. symcount - 1]) |*node| node.* = .{};
 
         var used: u16 = 0; for (lens, 0 ..) |len, sym| if (len > 0) {
-            var word = &base[len - 1];
+            const word = &base[len - 1];
             used = self.insert(trunc(u16, sym), word.*, len, used);
             word.* += 1;
         };
@@ -537,7 +537,7 @@ const Bitmap = struct {
 
         var single_group: Group = undefined;
         var groups = if (groupc > 1) ctx.alloc(Group, groupc)
-            else @ptrCast([*]Group, &single_group)[0 .. 1];
+            else @as([*]Group, @ptrCast(&single_group))[0 .. 1];
 
         for (groups) |*g| g.* = Group.init(ctx, cache);
 
@@ -545,7 +545,7 @@ const Bitmap = struct {
         var d: u32 = undefined;
 
         for (self.data, 0 .. dsize) |*px, i| {
-            const ppx = @ptrCast([*]Pixel, px);
+            const ppx: [*]Pixel = @ptrCast(px);
             px.* = if (r > 0) blk: {
                 r -= 1;
                 break :blk cache.put((ppx - d)[0]);
@@ -564,10 +564,11 @@ const Bitmap = struct {
                 }) else if (code < LITLEN_COUNT) {
                     r = lendist(ctx, code - LITERALS_COUNT);
                     const distance = lendist(ctx, group.read(ctx, 4));
-                    d = @bitCast(u32, @max(1, if (distance < DISTMAP_COUNT)
+                    d = @bitCast(@max(1, if (distance < DISTMAP_COUNT)
                         @as(i32, distmap_offset[distance][0]) +
                         @as(i32, distmap_offset[distance][1]) * w
-                            else @bitCast(i32, distance) - DISTMAP_COUNT + 1));
+                            else @as(i32, @bitCast(distance))
+                                - DISTMAP_COUNT + 1));
                     break :blk cache.put((ppx - d)[0]);
                 } else cache.get(code);
             };
@@ -647,10 +648,10 @@ fn PredictorTransform(comptime enable: bool) type {
                     else => |x| bmp.pixel(trunc(u16, x), trunc(u16, y)).g,
                 },
             }, px, Neighbours {
-                .a = @ptrCast(*Pixel, data + i - 1),
-                .b = @ptrCast(*Pixel, data + i - w - 1),
-                .c = @ptrCast(*Pixel, data + i - w),
-                .d = @ptrCast(*Pixel, data + i - w + 1),
+                .a = @ptrCast(data + i - 1),
+                .b = @ptrCast(data + i - w - 1),
+                .c = @ptrCast(data + i - w),
+                .d = @ptrCast(data + i - w + 1),
             });
         }
     } else struct {
@@ -676,8 +677,8 @@ fn ColorTransform(comptime enable: bool) type {
 
         inline fn delta(c1: u8, c2: u8) u8 {
             return trunc(u8,
-                @as(i16, @bitCast(i8, c1)) *
-                @as(i16, @bitCast(i8, c2)) >> 5);
+                @as(i16, @as(i8, @bitCast(c1))) *
+                @as(i16, @as(i8, @bitCast(c2))) >> 5);
         }
 
         inline fn apply(self: Self, bitmap: *Bitmap) void {
@@ -780,8 +781,8 @@ const Context = struct {
 
     inline fn alloc(self: Self, comptime T: type, n: usize) []T {
         const a = @alignOf(T);
-        return @ptrCast([*]T, @alignCast(a, self.alloc_fn(
-            @sizeOf(T) * n, std.math.log2(a), self.provider)))[0 .. n];
+        return @as([*]T, @ptrCast(@alignCast(self.alloc_fn(
+            @sizeOf(T) * n, std.math.log2(a), self.provider))))[0 .. n];
     }
 
     inline fn decode(ctx: Context, a: Alloc, comptime cfg: Config) Bitmap {
@@ -792,7 +793,7 @@ const Context = struct {
         var cw = w;
 
         var rgba = Bitmap {
-            .data = @ptrCast([*]Pixel, a.vtable.alloc(a.ptr,
+            .data = @ptrCast(a.vtable.alloc(a.ptr,
                 @as(usize, w) * h * @sizeOf(Pixel), 0, @returnAddress())
                     orelse undefined),
 
@@ -872,7 +873,7 @@ fn decode_image(reader: anytype, allocator: Alloc, comptime cfg: Config) Image {
         }
 
         fn read_fn(n: u8, ctx: *anyopaque) u32 {
-            const self = @ptrCast(*Self, @alignCast(@alignOf(Self), ctx));
+            const self: *Self = @ptrCast(@alignCast(ctx));
             var out: u32 = 0;
             for (0 .. n) |i|
                 out |= self.readBit() << trunc(u5, i);
@@ -880,10 +881,10 @@ fn decode_image(reader: anytype, allocator: Alloc, comptime cfg: Config) Image {
         }
 
         fn alloc_fn(s: usize, a: u8, ctx: *anyopaque) *anyopaque {
-            const self = @ptrCast(*Self, @alignCast(@alignOf(Self), ctx));
+            const self: *Self = @ptrCast(@alignCast(ctx));
             const alloc = self.alloc;
-            return @ptrCast(*anyopaque,
-                alloc.vtable.alloc(alloc.ptr, s, a, @returnAddress())
+            return @ptrCast(alloc.vtable.alloc(
+                alloc.ptr, s, a, @returnAddress())
                     orelse undefined);
         }
     };
@@ -902,7 +903,7 @@ fn decode_image(reader: anytype, allocator: Alloc, comptime cfg: Config) Image {
     }, allocator, cfg);
 
     return .{
-        .data      = @ptrCast([*]u8, bitmap.data),
+        .data      = @ptrCast(bitmap.data),
         .w         = bitmap.w,
         .h         = bitmap.h,
         .allocator = allocator,
