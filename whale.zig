@@ -326,7 +326,7 @@ const Code = struct {
         return used - size;
     }
 
-    fn init_cannonical(ctx: Context, lens: []const u8, space: ?[]Node) Self {
+    fn init_canonical(ctx: Context, lens: []const u8, space: ?[]Node) Self {
         var base = [_]u16 { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
         var symcount: u16 = 0;
 
@@ -385,7 +385,7 @@ const Code = struct {
             0 => size, 1 => ctx.read(u16, ctx.read(u5, 3) * 2 + 2) + 2,
         };
 
-        const lencode = Self.init_cannonical(ctx, &lens, &tree);
+        const lencode = Self.init_canonical(ctx, &lens, &tree);
 
         var code_lens: [MAX_SYMBOLS]u8 = undefined;
 
@@ -413,7 +413,7 @@ const Code = struct {
                 code_lens[code_count] = repeat;
         }
 
-        return Self.init_cannonical(ctx, code_lens[0 .. code_count], null);
+        return Self.init_canonical(ctx, code_lens[0 .. code_count], null);
     }
 
     fn init(ctx: Context, size: u16) Self {

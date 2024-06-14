@@ -152,7 +152,7 @@ static vp8l_code_word_t vp8l_code_read(vp8l_context_t ctx, vp8l_code_t code) {
     } else return code->u.symbol[size < 2 ? 0 : ctx->read(1, ctx->u)];
 }
 
-static void vp8l_cannonical_code(
+static void vp8l_canonical_code(
     vp8l_context_t    ctx,
     vp8l_byte_t      *lengths,
     vp8l_code_word_t  size,
@@ -219,7 +219,7 @@ static void vp8l_complex_code_decode(
         : ctx->read(ctx->read(3, ctx->u) * 2 + 2, ctx->u) + 2;
 
     struct vp8l_code lc, *lencode = &lc;
-    vp8l_cannonical_code(ctx, lencode_lengths,
+    vp8l_canonical_code(ctx, lencode_lengths,
         VP8L_LENCODE_LENGTHS, lencode, lencode_treemem);
 
     vp8l_byte_t lengths[VP8L_MAX_SYMBOLS];
@@ -245,7 +245,7 @@ static void vp8l_complex_code_decode(
         while (s--) lengths[count++] = c;
     }
 
-    vp8l_cannonical_code(ctx, lengths, count, code, 0);
+    vp8l_canonical_code(ctx, lengths, count, code, 0);
 }
 
 static inline void vp8l_code_decode(
